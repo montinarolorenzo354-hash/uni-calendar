@@ -1,0 +1,51 @@
+name: Crea IPA Ateneo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installa XcodeGen
+        run: brew install xcodegen
+
+      - name: Compila e crea IPA
+        run: |
+          PROJECT_FILE=$(find "$GITHUB_WORKSPACE" -name project.yml -type f -print -quit)
+          if [ -z "$PROJECT_FILE" ]; then
+            echo "File project.yml non trovato. Controlla i file caricati."
+            exit 1
+          fi
+
+          cd "$(dirname "$PROJECT_FILE")"
+          xcodegen generate
+
+          xcodebuild \
+            -project Ateneo.xcodeproj \
+            -scheme Ateneo \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+          mkdir -p package/Payload
+          cp -R build/Build/Products/Release-iphoneos/Ateneo.app package/Payload/
+          cd package
+          zip -r "$GITHUB_WORKSPACE/Ateneo-unsigned.ipa" Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ateneo-IPA-per-Sideloadly
+          path: Ateneo-unsigned.ipa
+          if-no-files-found: error
